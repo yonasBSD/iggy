@@ -17,9 +17,9 @@
  * under the License.
  */
 
-pub mod container;
-pub mod sink;
-pub mod source;
+mod influxdb_sink;
+mod influxdb_sink_formats;
+mod influxdb_source;
+mod influxdb_source_formats;
 
-pub use sink::ElasticsearchSinkFixture;
-pub use source::ElasticsearchSourcePreCreatedFixture;
+const TEST_MESSAGE_COUNT: usize = 3;

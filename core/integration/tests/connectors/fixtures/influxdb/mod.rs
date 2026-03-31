@@ -21,5 +21,8 @@ pub mod container;
 pub mod sink;
 pub mod source;
 
-pub use sink::ElasticsearchSinkFixture;
-pub use source::ElasticsearchSourcePreCreatedFixture;
+pub use sink::{
+    InfluxDbSinkBase64Fixture, InfluxDbSinkFixture, InfluxDbSinkNoMetadataFixture,
+    InfluxDbSinkNsPrecisionFixture, InfluxDbSinkTextFixture,
+};
+pub use source::{InfluxDbSourceFixture, InfluxDbSourceRawFixture, InfluxDbSourceTextFixture};
