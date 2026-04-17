@@ -34,7 +34,7 @@ use consensus::{
     ack_quorum_reached, build_reply_message, drain_committable_prefix,
     emit_namespace_progress_event, emit_partition_diag, emit_sim_event,
     fence_old_prepare_by_commit, replicate_preflight, replicate_to_next_in_chain,
-    send_prepare_ok as send_prepare_ok_common,
+    request_preflight, send_prepare_ok as send_prepare_ok_common,
 };
 use iggy_binary_protocol::consensus::iobuf::Frozen;
 use iggy_binary_protocol::{GenericHeader, PrepareOkHeader, RequestHeader};
@@ -587,14 +587,38 @@ where
     pub async fn on_request(&mut self, message: Message<RequestHeader>) {
         self.clear_pending_consumer_offset_commits_if_view_changed();
         let namespace = IggyNamespace::from_raw(message.header().namespace);
+        let client_id = message.header().client;
+        let session = message.header().session;
+        let request = message.header().request;
+
+        // TODO: Add a bounded request queue instead of dropping here.
+        // When the prepare queue (8 max) is full, buffer incoming requests
+        // in a request queue. On commit, pop the next request from the
+        // request queue and begin preparing it. Only drop when both queues
+        // are full.
+        {
+            let consensus = self.consensus();
+            if consensus.pipeline().borrow().is_full() {
+                emit_partition_diag(
+                    tracing::Level::WARN,
+                    &PartitionDiagEvent::new(
+                        ReplicaLogContext::from_consensus(consensus, PlaneKind::Partitions),
+                        "on_request: pipeline full, dropping request",
+                    )
+                    .with_operation(message.header().operation),
+                );
+                return;
+            }
+        }
+
         let prepare = {
             let consensus = self.consensus();
             emit_sim_event(
                 SimEventKind::ClientRequestReceived,
                 &RequestLogEvent {
                     replica: ReplicaLogContext::from_consensus(consensus, PlaneKind::Partitions),
-                    client_id: message.header().client,
-                    request_id: message.header().request,
+                    client_id,
+                    request_id: request,
                     operation: message.header().operation,
                 },
             );
@@ -638,6 +662,13 @@ where
                         return;
                     }
                 }
+            }
+
+            if request_preflight(consensus, client_id, session, request)
+                .await
+                .is_none()
+            {
+                return;
             }
 
             assert!(!consensus.is_follower(), "on_request: primary only");
@@ -1080,10 +1111,29 @@ where
                 pipeline_depth,
             );
 
+            // Cache reply in client_table (both primary and backups) to
+            // preserve idempotency/dedup across view changes. Only the
+            // primary actually sends the reply to the client.
+            let reply = build_reply_message(&self.consensus, &prepare_header, bytes::Bytes::new());
+            let session = self
+                .consensus
+                .client_table()
+                .borrow()
+                .get_session(prepare_header.client)
+                .unwrap_or_else(|| {
+                    panic!(
+                        "handle_committed_entries: client {} not registered",
+                        prepare_header.client
+                    )
+                });
+            self.consensus.client_table().borrow_mut().commit_reply(
+                prepare_header.client,
+                session,
+                reply.clone(),
+            );
+
             if send_client_replies {
-                let reply_buffers =
-                    build_reply_message(&self.consensus, &prepare_header, bytes::Bytes::new())
-                        .into_generic();
+                let reply_buffers = reply.into_generic();
                 emit_sim_event(SimEventKind::ClientReplyEmitted, &event);
 
                 if let Err(error) = self
