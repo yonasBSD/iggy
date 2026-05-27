@@ -16,30 +16,23 @@
 # under the License.
 
 type = "source"
-key = "random"
+key = "random_bench"
 enabled = true
 version = 0
-name = "Random source"
-path = "target/release/libiggy_connector_random_source"
+name = "Random benchmark source"
+path = "../../target/debug/libiggy_connector_random_source"
 plugin_config_format = "json"
-benchmark = true # Emit per-batch timings on target `iggy_connectors::benchmark`
+benchmark = true
 
 [[streams]]
-stream = "example_stream"
-topic = "example_topic"
+stream = "test_stream"
+topic = "test_topic"
 schema = "json"
-batch_length = 1000
+batch_length = 100
 linger_time = "5ms"
 
 [plugin_config]
-interval = "100ms"
-max_count = 1000
-messages_range = [10, 50]
-payload_size = 200
-
-[transforms.add_fields]
-enabled = true
-
-[[transforms.add_fields.fields]]
-key = "test_field"
-value.static = "hello!"
+interval = "50ms"
+max_count = 1_000_000
+messages_range = [3, 5]
+payload_size = 100

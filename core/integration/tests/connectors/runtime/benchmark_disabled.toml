@@ -15,31 +15,9 @@
 # specific language governing permissions and limitations
 # under the License.
 
-type = "source"
-key = "random"
+[connectors]
+config_type = "local"
+config_dir = "tests/connectors/runtime/benchmark_disabled_config"
+
+[http.metrics]
 enabled = true
-version = 0
-name = "Random source"
-path = "target/release/libiggy_connector_random_source"
-plugin_config_format = "json"
-benchmark = true # Emit per-batch timings on target `iggy_connectors::benchmark`
-
-[[streams]]
-stream = "example_stream"
-topic = "example_topic"
-schema = "json"
-batch_length = 1000
-linger_time = "5ms"
-
-[plugin_config]
-interval = "100ms"
-max_count = 1000
-messages_range = [10, 50]
-payload_size = 200
-
-[transforms.add_fields]
-enabled = true
-
-[[transforms.add_fields.fields]]
-key = "test_field"
-value.static = "hello!"
